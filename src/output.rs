@@ -180,6 +180,8 @@ fn normalized_relative_path(path: &Path) -> Result<String> {
 ///
 /// 写入 Vessel 内容组件发射的生成文件。
 pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> Result<()> {
+    validate_unique_generated_paths(files)?;
+
     if let Some(policy) = ManagedOutputPolicy::load(output_dir)? {
         policy.validate_generated_paths(files)?;
         policy.prune_stale_files(files)?;
@@ -195,5 +197,21 @@ pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> R
         fs::write(&full, &file.ron_text)
             .with_context(|| format!("failed to write: {}", full.display()))?;
     }
+    Ok(())
+}
+
+fn validate_unique_generated_paths(files: &[GeneratedRonFile]) -> Result<()> {
+    let mut seen = BTreeSet::new();
+
+    for file in files {
+        let relative = normalized_relative_path(&file.path)?;
+        if !seen.insert(relative.clone()) {
+            return Err(anyhow!(
+                "generated file '{}' was emitted more than once",
+                relative
+            ));
+        }
+    }
+
     Ok(())
 }

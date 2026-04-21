@@ -121,3 +121,32 @@ managed_paths = ["battle/**/*.ron"]
 
     let _ = fs::remove_dir_all(&output_dir);
 }
+
+#[test]
+fn rejects_duplicate_generated_paths() {
+    let output_dir = temp_output_dir("vessel_component_duplicate_paths");
+
+    fs::create_dir_all(&output_dir).expect("should create output directory");
+
+    let err = vessel::write_generated_files(
+        &[
+            vessel::GeneratedRonFile {
+                path: PathBuf::from("example/duplicate.ron"),
+                ron_text: "(value: 1)\n".to_owned(),
+            },
+            vessel::GeneratedRonFile {
+                path: PathBuf::from("./example/duplicate.ron"),
+                ron_text: "(value: 2)\n".to_owned(),
+            },
+        ],
+        &output_dir,
+    )
+    .expect_err("host should reject duplicate output paths");
+    let err_text = err.to_string();
+    assert!(
+        err_text.contains("was emitted more than once"),
+        "unexpected error: {err_text}"
+    );
+
+    let _ = fs::remove_dir_all(&output_dir);
+}
