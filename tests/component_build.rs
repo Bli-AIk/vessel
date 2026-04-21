@@ -3,10 +3,12 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-#[test]
-fn builds_generated_ron_from_wasm_component() {
-    let fixture_dir =
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/minimal_guest");
+fn fixture_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/minimal_guest")
+}
+
+fn build_fixture_guest() -> PathBuf {
+    let fixture_dir = fixture_dir();
 
     let status = Command::new("cargo")
         .current_dir(&fixture_dir)
@@ -22,12 +24,23 @@ fn builds_generated_ron_from_wasm_component() {
         "fixture wasm component should exist"
     );
 
+    component_path
+}
+
+fn temp_output_dir(prefix: &str) -> PathBuf {
     let unique = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("system clock should be after unix epoch")
         .as_nanos();
-    let output_dir = std::env::temp_dir().join(format!("vessel_component_build_{unique}"));
+    let output_dir = std::env::temp_dir().join(format!("{prefix}_{unique}"));
     let _ = fs::remove_dir_all(&output_dir);
+    output_dir
+}
+
+#[test]
+fn builds_generated_ron_from_wasm_component() {
+    let component_path = build_fixture_guest();
+    let output_dir = temp_output_dir("vessel_component_build");
 
     let summary = vessel::build_component(&component_path, &output_dir)
         .expect("vessel host should build files from the wasm component");
@@ -48,6 +61,62 @@ fn builds_generated_ron_from_wasm_component() {
     assert!(
         content.contains("fixture"),
         "generated file should contain fixture payload"
+    );
+
+    let _ = fs::remove_dir_all(&output_dir);
+}
+
+#[test]
+fn prunes_stale_files_inside_managed_paths() {
+    let component_path = build_fixture_guest();
+    let output_dir = temp_output_dir("vessel_component_managed");
+
+    fs::create_dir_all(output_dir.join("example")).expect("should create example directory");
+    fs::write(
+        output_dir.join("mod.toml"),
+        r#"[content_library]
+managed_paths = ["example/*.ron"]
+"#,
+    )
+    .expect("should write mod.toml");
+    fs::write(output_dir.join("example/stale.ron"), "(stale: true)\n")
+        .expect("should write stale managed file");
+
+    vessel::build_component(&component_path, &output_dir)
+        .expect("managed output should be generated successfully");
+
+    assert!(
+        output_dir.join("example/test.ron").exists(),
+        "fresh managed file should exist"
+    );
+    assert!(
+        !output_dir.join("example/stale.ron").exists(),
+        "stale managed file should be pruned"
+    );
+
+    let _ = fs::remove_dir_all(&output_dir);
+}
+
+#[test]
+fn rejects_generated_files_outside_managed_paths() {
+    let component_path = build_fixture_guest();
+    let output_dir = temp_output_dir("vessel_component_rejects_unmanaged");
+
+    fs::create_dir_all(&output_dir).expect("should create output directory");
+    fs::write(
+        output_dir.join("mod.toml"),
+        r#"[content_library]
+managed_paths = ["battle/**/*.ron"]
+"#,
+    )
+    .expect("should write mod.toml");
+
+    let err = vessel::build_component(&component_path, &output_dir)
+        .expect_err("host should reject unmanaged output paths");
+    let err_text = err.to_string();
+    assert!(
+        err_text.contains("outside content_library.managed_paths"),
+        "unexpected error: {err_text}"
     );
 
     let _ = fs::remove_dir_all(&output_dir);
