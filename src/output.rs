@@ -4,8 +4,7 @@
 
 use crate::component_host::GeneratedRonFile;
 use anyhow::{Context, Result, anyhow};
-use globset::{Glob, GlobMatcher};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -28,6 +27,12 @@ const DEFAULT_GENERATED_FILE_HEADER: &str = r#"// ==============================
 //    instead of modifying this file directly.
 // ============================================================================="#;
 
+const OUTPUT_MANIFEST_RELATIVE_PATH: &str = ".build/vessel-output-manifest.toml";
+const OUTPUT_MANIFEST_VERSION: u32 = 1;
+const FORBIDDEN_OUTPUT_ROOTS: &[&str] = &[
+    ".build", ".git", ".idea", ".vscode", "content", "runtime", "target",
+];
+
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 struct ProjectFile {
@@ -37,81 +42,160 @@ struct ProjectFile {
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
 struct ContentLibraryConfig {
-    managed_paths: Vec<String>,
     generated_file_header: Option<String>,
 }
 
-#[derive(Debug)]
-struct ManagedOutputPolicy {
-    project_root: PathBuf,
-    patterns: Vec<String>,
-    matchers: Vec<GlobMatcher>,
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(default)]
+struct OutputManifest {
+    version: u32,
+    owned_paths: Vec<String>,
 }
 
 #[derive(Debug)]
 struct OutputConfig {
-    managed_output_policy: Option<ManagedOutputPolicy>,
+    manifest_path: PathBuf,
     generated_file_header: String,
-}
-
-impl ManagedOutputPolicy {
-    fn from_project_file(project_root: &Path, parsed: &ProjectFile) -> Result<Option<Self>> {
-        if parsed.content_library.managed_paths.is_empty() {
-            return Ok(None);
-        }
-
-        let mut matchers = Vec::with_capacity(parsed.content_library.managed_paths.len());
-        for pattern in &parsed.content_library.managed_paths {
-            let matcher = Glob::new(pattern)
-                .with_context(|| format!("invalid managed_paths glob: {pattern}"))?
-                .compile_matcher();
-            matchers.push(matcher);
-        }
-
-        Ok(Some(Self {
-            project_root: project_root.to_path_buf(),
-            patterns: parsed.content_library.managed_paths.clone(),
-            matchers,
-        }))
-    }
 }
 
 impl OutputConfig {
     fn load(project_root: &Path) -> Result<Self> {
         let mod_toml = project_root.join("mod.toml");
-        if !mod_toml.exists() {
-            return Ok(Self {
-                managed_output_policy: None,
-                generated_file_header: DEFAULT_GENERATED_FILE_HEADER.to_owned(),
-            });
-        }
-
-        let contents = fs::read_to_string(&mod_toml)
-            .with_context(|| format!("failed to read project file: {}", mod_toml.display()))?;
-        let parsed: ProjectFile = toml::from_str(&contents)
-            .with_context(|| format!("failed to parse project file: {}", mod_toml.display()))?;
-
-        Ok(Self {
-            managed_output_policy: ManagedOutputPolicy::from_project_file(project_root, &parsed)?,
-            generated_file_header: parsed
+        let generated_file_header = if mod_toml.exists() {
+            let contents = fs::read_to_string(&mod_toml)
+                .with_context(|| format!("failed to read project file: {}", mod_toml.display()))?;
+            let parsed: ProjectFile = toml::from_str(&contents)
+                .with_context(|| format!("failed to parse project file: {}", mod_toml.display()))?;
+            parsed
                 .content_library
                 .generated_file_header
-                .unwrap_or_else(|| DEFAULT_GENERATED_FILE_HEADER.to_owned()),
+                .unwrap_or_else(|| DEFAULT_GENERATED_FILE_HEADER.to_owned())
+        } else {
+            DEFAULT_GENERATED_FILE_HEADER.to_owned()
+        };
+
+        Ok(Self {
+            manifest_path: project_root.join(OUTPUT_MANIFEST_RELATIVE_PATH),
+            generated_file_header,
         })
     }
 
     fn validate_generated_paths(&self, files: &[GeneratedRonFile]) -> Result<()> {
-        let Some(policy) = &self.managed_output_policy else {
-            return Ok(());
-        };
-        policy.validate_generated_paths(files)
+        for file in files {
+            let relative = normalized_relative_path(&file.path)?;
+            if !relative.ends_with(".ron") {
+                return Err(anyhow!("generated path '{}' must end with .ron", relative));
+            }
+
+            let first_segment = relative
+                .split('/')
+                .next()
+                .expect("normalized relative path should contain at least one segment");
+            if FORBIDDEN_OUTPUT_ROOTS.contains(&first_segment) {
+                return Err(anyhow!(
+                    "generated path '{}' is not allowed under tooling/source root '{}'",
+                    relative,
+                    first_segment
+                ));
+            }
+        }
+
+        Ok(())
     }
 
-    fn prune_stale_files(&self, files: &[GeneratedRonFile]) -> Result<()> {
-        let Some(policy) = &self.managed_output_policy else {
-            return Ok(());
+    fn prune_stale_files(&self, files: &[GeneratedRonFile], output_dir: &Path) -> Result<()> {
+        let previous = self.load_manifest()?;
+        let expected_paths: BTreeSet<String> = files
+            .iter()
+            .map(|file| normalized_relative_path(&file.path))
+            .collect::<Result<_>>()?;
+
+        for previous_path in previous.owned_paths {
+            let relative =
+                normalized_relative_path(Path::new(&previous_path)).with_context(|| {
+                    format!(
+                        "invalid path '{}' found in vessel output manifest {}",
+                        previous_path,
+                        self.manifest_path.display()
+                    )
+                })?;
+            if expected_paths.contains(&relative) {
+                continue;
+            }
+
+            let path = output_dir.join(&relative);
+            if !path.exists() {
+                continue;
+            }
+            if !path.is_file() {
+                return Err(anyhow!(
+                    "previously owned path '{}' is not a file",
+                    path.display()
+                ));
+            }
+
+            fs::remove_file(&path).with_context(|| {
+                format!("failed to remove stale generated file: {}", path.display())
+            })?;
+        }
+
+        Ok(())
+    }
+
+    fn write_manifest(&self, files: &[GeneratedRonFile]) -> Result<()> {
+        let owned_paths = files
+            .iter()
+            .map(|file| normalized_relative_path(&file.path))
+            .collect::<Result<Vec<_>>>()?;
+
+        let manifest = OutputManifest {
+            version: OUTPUT_MANIFEST_VERSION,
+            owned_paths,
         };
-        policy.prune_stale_files(files)
+        let serialized = toml::to_string_pretty(&manifest)
+            .context("failed to serialize vessel output manifest")?;
+
+        if let Some(parent) = self.manifest_path.parent() {
+            fs::create_dir_all(parent)
+                .with_context(|| format!("failed to create directory: {}", parent.display()))?;
+        }
+        fs::write(&self.manifest_path, serialized).with_context(|| {
+            format!(
+                "failed to write vessel output manifest: {}",
+                self.manifest_path.display()
+            )
+        })?;
+
+        Ok(())
+    }
+
+    fn load_manifest(&self) -> Result<OutputManifest> {
+        if !self.manifest_path.exists() {
+            return Ok(OutputManifest::default());
+        }
+
+        let contents = fs::read_to_string(&self.manifest_path).with_context(|| {
+            format!(
+                "failed to read vessel output manifest: {}",
+                self.manifest_path.display()
+            )
+        })?;
+        let manifest: OutputManifest = toml::from_str(&contents).with_context(|| {
+            format!(
+                "failed to parse vessel output manifest: {}",
+                self.manifest_path.display()
+            )
+        })?;
+
+        if manifest.version != OUTPUT_MANIFEST_VERSION {
+            return Err(anyhow!(
+                "unsupported vessel output manifest version {} in {}",
+                manifest.version,
+                self.manifest_path.display()
+            ));
+        }
+
+        Ok(manifest)
     }
 
     fn render_output_text(&self, ron_text: &str) -> String {
@@ -121,92 +205,6 @@ impl OutputConfig {
             return format!("{body}\n");
         }
         format!("{header}\n\n{body}\n")
-    }
-}
-
-impl ManagedOutputPolicy {
-    fn validate_generated_paths(&self, files: &[GeneratedRonFile]) -> Result<()> {
-        if files.is_empty() {
-            return Ok(());
-        }
-        if self.matchers.is_empty() {
-            return Err(anyhow!(
-                "project {} has generated files but content_library.managed_paths is empty",
-                self.project_root.display()
-            ));
-        }
-
-        for file in files {
-            let relative = normalized_relative_path(&file.path)?;
-            let owned = self
-                .matchers
-                .iter()
-                .any(|matcher| matcher.is_match(&relative));
-            if !owned {
-                return Err(anyhow!(
-                    "generated file '{}' is outside content_library.managed_paths",
-                    relative
-                ));
-            }
-        }
-
-        Ok(())
-    }
-
-    fn prune_stale_files(&self, files: &[GeneratedRonFile]) -> Result<()> {
-        if self.patterns.is_empty() {
-            return Ok(());
-        }
-
-        let expected_paths: BTreeSet<String> = files
-            .iter()
-            .map(|file| normalized_relative_path(&file.path))
-            .collect::<Result<_>>()?;
-
-        for pattern in &self.patterns {
-            self.prune_pattern(pattern, &expected_paths)?;
-        }
-
-        Ok(())
-    }
-
-    fn prune_pattern(&self, pattern: &str, expected_paths: &BTreeSet<String>) -> Result<()> {
-        let absolute_pattern = self.project_root.join(pattern);
-        let glob_pattern = absolute_pattern.to_string_lossy().into_owned();
-        for entry in glob::glob(&glob_pattern)
-            .with_context(|| format!("invalid glob while pruning stale files: {pattern}"))?
-        {
-            let path = entry.with_context(|| {
-                format!("failed to enumerate managed path for pattern {pattern}")
-            })?;
-            if !path.is_file() {
-                continue;
-            }
-
-            let relative = self.relative_managed_path(&path)?;
-            if expected_paths.contains(&relative) {
-                continue;
-            }
-
-            fs::remove_file(&path).with_context(|| {
-                format!("failed to remove stale managed file: {}", path.display())
-            })?;
-        }
-        Ok(())
-    }
-
-    fn relative_managed_path(&self, path: &Path) -> Result<String> {
-        Ok(path
-            .strip_prefix(&self.project_root)
-            .with_context(|| {
-                format!(
-                    "managed path '{}' is not under project root '{}'",
-                    path.display(),
-                    self.project_root.display()
-                )
-            })?
-            .to_string_lossy()
-            .replace('\\', "/"))
     }
 }
 
@@ -253,7 +251,7 @@ pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> R
 
     let output_config = OutputConfig::load(output_dir)?;
     output_config.validate_generated_paths(files)?;
-    output_config.prune_stale_files(files)?;
+    output_config.prune_stale_files(files, output_dir)?;
 
     for file in files {
         let relative = normalized_relative_path(&file.path)?;
@@ -266,6 +264,8 @@ pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> R
         fs::write(&full, rendered_text)
             .with_context(|| format!("failed to write: {}", full.display()))?;
     }
+
+    output_config.write_manifest(files)?;
     Ok(())
 }
 

@@ -67,55 +67,75 @@ fn builds_generated_ron_from_wasm_component() {
 }
 
 #[test]
-fn prunes_stale_files_inside_managed_paths() {
+fn prunes_stale_files_from_previous_output_manifest() {
     let component_path = build_fixture_guest();
-    let output_dir = temp_output_dir("vessel_component_managed");
+    let output_dir = temp_output_dir("vessel_component_manifest");
 
     fs::create_dir_all(output_dir.join("example")).expect("should create example directory");
-    fs::write(
-        output_dir.join("mod.toml"),
-        r#"[content_library]
-managed_paths = ["example/*.ron"]
-"#,
-    )
-    .expect("should write mod.toml");
     fs::write(output_dir.join("example/stale.ron"), "(stale: true)\n")
         .expect("should write stale managed file");
+    fs::create_dir_all(output_dir.join(".build")).expect("should create build directory");
+    fs::write(
+        output_dir.join(".build/vessel-output-manifest.toml"),
+        r#"version = 1
+owned_paths = ["example/stale.ron", "example/test.ron"]
+"#,
+    )
+    .expect("should write previous output manifest");
 
     vessel::build_component(&component_path, &output_dir)
-        .expect("managed output should be generated successfully");
+        .expect("manifest-managed output should be generated successfully");
 
     assert!(
         output_dir.join("example/test.ron").exists(),
-        "fresh managed file should exist"
+        "fresh generated file should exist"
     );
     assert!(
         !output_dir.join("example/stale.ron").exists(),
-        "stale managed file should be pruned"
+        "stale generated file should be pruned"
     );
 
     let _ = fs::remove_dir_all(&output_dir);
 }
 
 #[test]
-fn rejects_generated_files_outside_managed_paths() {
-    let component_path = build_fixture_guest();
-    let output_dir = temp_output_dir("vessel_component_rejects_unmanaged");
+fn rejects_generated_files_inside_tooling_directories() {
+    let output_dir = temp_output_dir("vessel_component_rejects_tooling_roots");
 
     fs::create_dir_all(&output_dir).expect("should create output directory");
-    fs::write(
-        output_dir.join("mod.toml"),
-        r#"[content_library]
-managed_paths = ["battle/**/*.ron"]
-"#,
+    let err = vessel::write_generated_files(
+        &[vessel::GeneratedRonFile {
+            path: PathBuf::from("content/ron/forbidden.ron"),
+            ron_text: "(value: 1)\n".to_owned(),
+        }],
+        &output_dir,
     )
-    .expect("should write mod.toml");
-
-    let err = vessel::build_component(&component_path, &output_dir)
-        .expect_err("host should reject unmanaged output paths");
+    .expect_err("host should reject generated files inside tooling roots");
     let err_text = err.to_string();
     assert!(
-        err_text.contains("outside content_library.managed_paths"),
+        err_text.contains("not allowed under tooling/source root"),
+        "unexpected error: {err_text}"
+    );
+
+    let _ = fs::remove_dir_all(&output_dir);
+}
+
+#[test]
+fn rejects_generated_files_without_ron_extension() {
+    let output_dir = temp_output_dir("vessel_component_rejects_non_ron");
+
+    fs::create_dir_all(&output_dir).expect("should create output directory");
+    let err = vessel::write_generated_files(
+        &[vessel::GeneratedRonFile {
+            path: PathBuf::from("battle/not_ron.txt"),
+            ron_text: "(value: 1)\n".to_owned(),
+        }],
+        &output_dir,
+    )
+    .expect_err("host should reject non-RON output paths");
+    let err_text = err.to_string();
+    assert!(
+        err_text.contains("must end with .ron"),
         "unexpected error: {err_text}"
     );
 
