@@ -1,6 +1,6 @@
-//! Wasmtime host for executing Vessel content components.
+//! Wasmtime host for executing Vessel content modules.
 //!
-//! 用于执行 Vessel 内容组件的 Wasmtime 宿主。
+//! 用于执行 Vessel 内容模块的 Wasmtime 宿主。
 
 use anyhow::{Result, anyhow};
 use std::path::{Path, PathBuf};
@@ -13,9 +13,9 @@ wasmtime::component::bindgen!({
     world: "content-module",
 });
 
-/// A single generated RON file emitted by a Vessel content component.
+/// A single generated RON file emitted by a Vessel content module.
 ///
-/// Vessel 内容组件发射的一条 RON 文件。
+/// Vessel 内容模块生成的一个 RON 文件。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GeneratedRonFile {
     pub path: PathBuf,
@@ -24,7 +24,7 @@ pub struct GeneratedRonFile {
 
 /// Summary returned after writing component output to disk.
 ///
-/// 将组件输出写入磁盘后的摘要。
+/// 将组件输出写入磁盘后返回的摘要。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct BuildSummary {
     pub component_path: PathBuf,
@@ -46,9 +46,9 @@ impl wasmtime_wasi::WasiView for HostState {
     }
 }
 
-/// Load a Vessel content component and collect the files it emits.
+/// Load a Vessel content module and collect the files it emits.
 ///
-/// 加载一个 Vessel 内容组件并收集它发射的文件。
+/// 加载一个 Vessel 内容模块并收集它输出的文件。
 pub fn load_component_files(component_path: impl AsRef<Path>) -> Result<Vec<GeneratedRonFile>> {
     let component_path = component_path.as_ref();
 
@@ -93,9 +93,9 @@ pub fn load_component_files(component_path: impl AsRef<Path>) -> Result<Vec<Gene
         .collect())
 }
 
-/// Execute a Vessel content component and write its output under `output_dir`.
+/// Execute a Vessel content module and write its output under `output_dir`.
 ///
-/// 执行 Vessel 内容组件并将其输出写入 `output_dir`。
+/// 执行 Vessel 内容模块并将其输出写入 `output_dir`。
 pub fn build_component(
     component_path: impl AsRef<Path>,
     output_dir: impl AsRef<Path>,

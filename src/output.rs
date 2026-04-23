@@ -243,9 +243,9 @@ fn normalized_relative_path(path: &Path) -> Result<String> {
     Ok(parts.join("/"))
 }
 
-/// Write generated files emitted by a Vessel content component.
+/// Write generated files produced by a Vessel content module.
 ///
-/// 写入 Vessel 内容组件发射的生成文件。
+/// 写入 Vessel 内容模块生成的生成文件。
 pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> Result<()> {
     validate_unique_generated_paths(files)?;
 

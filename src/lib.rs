@@ -7,8 +7,8 @@
 //! emitted RON files to disk.
 //!
 //! Vessel 是 `WASM guest -> host -> RON` 流水线的构建期宿主。
-//! 它会加载一个 WebAssembly component，调用它的 `build` 导出函数，
-//! 然后将发射出的 RON 文件写入磁盘。
+//! 它加载一个 WebAssembly component，调用其 `build` 导出函数，
+//! 然后将生成的 RON 文件写入磁盘。
 
 pub mod cli;
 mod component_host;

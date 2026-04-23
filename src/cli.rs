@@ -23,9 +23,9 @@ pub struct Cli {
 /// Vessel 支持的命令。
 #[derive(Debug, Subcommand)]
 pub enum Command {
-    /// Execute a content component and write its generated RON files.
+    /// Execute a content module and write its generated RON files.
     ///
-    /// 执行内容组件并写出其生成的 RON 文件。
+    /// 执行内容模块并写出其生成的 RON 文件。
     Build {
         /// Path to the WASM component.
         component: PathBuf,
