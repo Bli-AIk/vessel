@@ -37,6 +37,13 @@ fn temp_output_dir(prefix: &str) -> PathBuf {
     output_dir
 }
 
+fn generated_file(path: impl Into<PathBuf>) -> vessel::GeneratedRonFile {
+    vessel::GeneratedRonFile {
+        path: path.into(),
+        ron_text: "(value: 1)\n".to_owned(),
+    }
+}
+
 #[test]
 fn builds_generated_ron_from_wasm_component() {
     let component_path = build_fixture_guest();
@@ -103,14 +110,9 @@ fn rejects_generated_files_inside_tooling_directories() {
     let output_dir = temp_output_dir("vessel_component_rejects_tooling_roots");
 
     fs::create_dir_all(&output_dir).expect("should create output directory");
-    let err = vessel::write_generated_files(
-        &[vessel::GeneratedRonFile {
-            path: PathBuf::from("content/ron/forbidden.ron"),
-            ron_text: "(value: 1)\n".to_owned(),
-        }],
-        &output_dir,
-    )
-    .expect_err("host should reject generated files inside tooling roots");
+    let err =
+        vessel::write_generated_files(&[generated_file("content/ron/forbidden.ron")], &output_dir)
+            .expect_err("host should reject generated files inside tooling roots");
     let err_text = err.to_string();
     assert!(
         err_text.contains("not allowed under tooling/source root"),
@@ -125,14 +127,8 @@ fn rejects_generated_files_without_ron_extension() {
     let output_dir = temp_output_dir("vessel_component_rejects_non_ron");
 
     fs::create_dir_all(&output_dir).expect("should create output directory");
-    let err = vessel::write_generated_files(
-        &[vessel::GeneratedRonFile {
-            path: PathBuf::from("battle/not_ron.txt"),
-            ron_text: "(value: 1)\n".to_owned(),
-        }],
-        &output_dir,
-    )
-    .expect_err("host should reject non-RON output paths");
+    let err = vessel::write_generated_files(&[generated_file("battle/not_ron.txt")], &output_dir)
+        .expect_err("host should reject non-RON output paths");
     let err_text = err.to_string();
     assert!(
         err_text.contains("must end with .ron"),
@@ -167,6 +163,62 @@ fn rejects_duplicate_generated_paths() {
         err_text.contains("was emitted more than once"),
         "unexpected error: {err_text}"
     );
+
+    let _ = fs::remove_dir_all(&output_dir);
+}
+
+#[test]
+fn rejects_unsafe_generated_paths() {
+    let cases = [
+        (PathBuf::from("/tmp/escape.ron"), "must be relative"),
+        (
+            PathBuf::from("../escape.ron"),
+            "must not contain parent traversal",
+        ),
+        (PathBuf::from(""), "must not be empty"),
+        (
+            PathBuf::from("C:/escape.ron"),
+            "must not contain a Windows drive prefix",
+        ),
+        (
+            PathBuf::from("windows\\escape.ron"),
+            "must use forward slashes",
+        ),
+    ];
+
+    for (path, expected_message) in cases {
+        let output_dir = temp_output_dir("vessel_component_rejects_unsafe_path");
+        fs::create_dir_all(&output_dir).expect("should create output directory");
+        let err = vessel::write_generated_files(&[generated_file(path)], &output_dir)
+            .expect_err("host should reject unsafe output path");
+        let err_text = err.to_string();
+        assert!(
+            err_text.contains(expected_message),
+            "unexpected error for {expected_message}: {err_text}"
+        );
+        let _ = fs::remove_dir_all(&output_dir);
+    }
+}
+
+#[test]
+fn rejects_overwriting_existing_files_not_owned_by_manifest() {
+    let output_dir = temp_output_dir("vessel_component_rejects_unmanaged_existing");
+
+    fs::create_dir_all(output_dir.join("example")).expect("should create example directory");
+    fs::write(output_dir.join("example/existing.ron"), "(manual: true)\n")
+        .expect("should write unmanaged file");
+
+    let err = vessel::write_generated_files(&[generated_file("example/existing.ron")], &output_dir)
+        .expect_err("host should reject overwriting unmanaged files");
+    let err_text = err.to_string();
+    assert!(
+        err_text.contains("is not managed by Vessel manifest"),
+        "unexpected error: {err_text}"
+    );
+
+    let preserved = fs::read_to_string(output_dir.join("example/existing.ron"))
+        .expect("unmanaged file should still be readable");
+    assert_eq!(preserved, "(manual: true)\n");
 
     let _ = fs::remove_dir_all(&output_dir);
 }

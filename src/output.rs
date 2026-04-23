@@ -142,6 +142,42 @@ impl OutputConfig {
         Ok(())
     }
 
+    fn validate_manifest_ownership(
+        &self,
+        files: &[GeneratedRonFile],
+        output_dir: &Path,
+    ) -> Result<()> {
+        let previous = self.load_manifest()?;
+        let owned_paths = previous
+            .owned_paths
+            .iter()
+            .map(|path| normalized_relative_path(Path::new(path)))
+            .collect::<Result<BTreeSet<_>>>()?;
+
+        for file in files {
+            let relative = normalized_relative_path(&file.path)?;
+            let path = output_dir.join(&relative);
+            if !path.exists() {
+                continue;
+            }
+            if !path.is_file() {
+                return Err(anyhow!(
+                    "generated path '{}' already exists but is not a file",
+                    relative
+                ));
+            }
+            if !owned_paths.contains(&relative) {
+                return Err(anyhow!(
+                    "generated path '{}' already exists but is not managed by Vessel manifest {}",
+                    relative,
+                    self.manifest_path.display()
+                ));
+            }
+        }
+
+        Ok(())
+    }
+
     fn write_manifest(&self, files: &[GeneratedRonFile]) -> Result<()> {
         let owned_paths = files
             .iter()
@@ -216,6 +252,14 @@ fn normalized_relative_path(path: &Path) -> Result<String> {
         ));
     }
 
+    let raw_path = path.to_string_lossy();
+    if raw_path.contains('\\') {
+        return Err(anyhow!(
+            "generated path must use forward slashes: {}",
+            path.display()
+        ));
+    }
+
     let mut parts = Vec::new();
     for component in path.components() {
         match component {
@@ -240,6 +284,13 @@ fn normalized_relative_path(path: &Path) -> Result<String> {
         return Err(anyhow!("generated path must not be empty"));
     }
 
+    if parts.first().is_some_and(|part| part.ends_with(':')) {
+        return Err(anyhow!(
+            "generated path must not contain a Windows drive prefix: {}",
+            path.display()
+        ));
+    }
+
     Ok(parts.join("/"))
 }
 
@@ -252,6 +303,7 @@ pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> R
     let output_config = OutputConfig::load(output_dir)?;
     output_config.validate_generated_paths(files)?;
     output_config.prune_stale_files(files, output_dir)?;
+    output_config.validate_manifest_ownership(files, output_dir)?;
 
     for file in files {
         let relative = normalized_relative_path(&file.path)?;
