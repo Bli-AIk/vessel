@@ -1,6 +1,8 @@
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::thread;
+use std::time::Duration;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 fn fixture_dir() -> PathBuf {
@@ -64,6 +66,10 @@ fn builds_generated_ron_from_wasm_component() {
     assert!(
         content.contains("BOOTSTRAPPED BY VESSEL"),
         "generated file should include the default vessel bootstrap header"
+    );
+    assert!(
+        content.contains("// Generated at: "),
+        "generated file should include a human-readable generation timestamp"
     );
     assert!(
         content.contains("fixture"),
@@ -248,8 +254,8 @@ generated_file_header = "// custom header\n// generated for tests"
     let content = fs::read_to_string(output_dir.join("example/custom.ron"))
         .expect("generated file should be readable");
     assert!(
-        content.starts_with("// custom header\n// generated for tests\n\n"),
-        "custom header should be prepended verbatim: {content}"
+        content.starts_with("// custom header\n// generated for tests\n// Generated at: "),
+        "custom header should receive a generated-at line: {content}"
     );
     assert!(
         !content.contains("BOOTSTRAPPED BY VESSEL"),
@@ -286,6 +292,37 @@ generated_file_header = ""
     assert_eq!(
         content, "(value: 1)\n",
         "empty override should disable the generated header"
+    );
+
+    let _ = fs::remove_dir_all(&output_dir);
+}
+
+#[test]
+fn preserves_existing_timestamp_when_content_does_not_change() {
+    let output_dir = temp_output_dir("vessel_component_stable_timestamp");
+
+    fs::create_dir_all(&output_dir).expect("should create output directory");
+
+    let files = [vessel::GeneratedRonFile {
+        path: PathBuf::from("example/stable.ron"),
+        ron_text: "(value: 1)\n".to_owned(),
+    }];
+
+    vessel::write_generated_files(&files, &output_dir)
+        .expect("host should write generated file on first pass");
+    let output_path = output_dir.join("example/stable.ron");
+    let first = fs::read_to_string(&output_path).expect("first generated file should be readable");
+
+    thread::sleep(Duration::from_millis(1100));
+
+    vessel::write_generated_files(&files, &output_dir)
+        .expect("host should allow regenerating unchanged output");
+    let second =
+        fs::read_to_string(&output_path).expect("second generated file should be readable");
+
+    assert_eq!(
+        second, first,
+        "unchanged output should preserve the existing timestamp and avoid churn"
     );
 
     let _ = fs::remove_dir_all(&output_dir);

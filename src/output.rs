@@ -4,9 +4,11 @@
 
 use crate::component_host::GeneratedRonFile;
 use anyhow::{Context, Result, anyhow};
+use chrono::Local;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
+use std::io::ErrorKind;
 use std::path::{Component, Path, PathBuf};
 
 const DEFAULT_GENERATED_FILE_HEADER: &str = r#"// =============================================================================
@@ -29,6 +31,8 @@ const DEFAULT_GENERATED_FILE_HEADER: &str = r#"// ==============================
 
 const OUTPUT_MANIFEST_RELATIVE_PATH: &str = ".build/vessel-output-manifest.toml";
 const OUTPUT_MANIFEST_VERSION: u32 = 1;
+const GENERATED_AT_LINE_PREFIX: &str = "// Generated at: ";
+const GENERATED_AT_SIGNATURE_VALUE: &str = "{{generated_at}}";
 const FORBIDDEN_OUTPUT_ROOTS: &[&str] = &[
     ".build", ".git", ".idea", ".vscode", "content", "runtime", "target",
 ];
@@ -235,13 +239,49 @@ impl OutputConfig {
     }
 
     fn render_output_text(&self, ron_text: &str) -> String {
+        self.render_output_text_with_generated_at(ron_text, &formatted_generated_at())
+    }
+
+    fn render_output_signature(&self, ron_text: &str) -> String {
+        self.render_output_text_with_generated_at(ron_text, GENERATED_AT_SIGNATURE_VALUE)
+    }
+
+    fn matches_existing_output(&self, existing_text: &str, ron_text: &str) -> bool {
+        normalize_output_signature(existing_text) == self.render_output_signature(ron_text)
+    }
+
+    fn render_output_text_with_generated_at(&self, ron_text: &str, generated_at: &str) -> String {
         let body = ron_text.trim_end_matches(['\n', '\r']);
         let header = self.generated_file_header.trim_end_matches(['\n', '\r']);
         if header.is_empty() {
             return format!("{body}\n");
         }
-        format!("{header}\n\n{body}\n")
+        format!("{header}\n{GENERATED_AT_LINE_PREFIX}{generated_at}\n\n{body}\n")
     }
+}
+
+fn formatted_generated_at() -> String {
+    Local::now().format("%Y-%m-%d %H:%M:%S %:z").to_string()
+}
+
+fn normalize_output_signature(text: &str) -> String {
+    let mut normalized = String::with_capacity(text.len());
+    for line in text.split_inclusive('\n') {
+        let (line_body, has_newline) = match line.strip_suffix('\n') {
+            Some(body) => (body, true),
+            None => (line, false),
+        };
+        if line_body.starts_with(GENERATED_AT_LINE_PREFIX) {
+            normalized.push_str(GENERATED_AT_LINE_PREFIX);
+            normalized.push_str(GENERATED_AT_SIGNATURE_VALUE);
+        } else {
+            normalized.push_str(line_body);
+        }
+        if has_newline {
+            normalized.push('\n');
+        }
+    }
+    normalized
 }
 
 fn normalized_relative_path(path: &Path) -> Result<String> {
@@ -311,6 +351,20 @@ pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> R
         if let Some(parent) = full.parent() {
             fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create directory: {}", parent.display()))?;
+        }
+        let needs_write = match fs::read_to_string(&full) {
+            Ok(existing_text) => {
+                !output_config.matches_existing_output(&existing_text, &file.ron_text)
+            }
+            Err(err) if err.kind() == ErrorKind::NotFound => true,
+            Err(err) => {
+                return Err(err).with_context(|| {
+                    format!("failed to read existing output: {}", full.display())
+                });
+            }
+        };
+        if !needs_write {
+            continue;
         }
         let rendered_text = output_config.render_output_text(&file.ron_text);
         fs::write(&full, rendered_text)
