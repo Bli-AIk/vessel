@@ -1,4 +1,6 @@
 [workspace]
+features_always_increment_minor = true
+release_always = false
 pr_name = "chore{% if package and version %}: release {{ package }} v{{ version }}{% elif packages %}: release ({{ packages | length }} packages updated){% else %}: release{% endif %}"
 
 [changelog]
