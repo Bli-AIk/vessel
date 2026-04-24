@@ -16,27 +16,22 @@ This repository includes the following GitHub Actions workflows.
   - `cargo-deny`
   - `cargo-audit`
 
-### 2. `cla.yml`
-
-- Handles CLA signing for contributions to the repository
-- Uses CLA Assistant with signatures stored on the `cla-signatures` branch
-
-### 3. `deploy-docs.yml`
+### 2. `deploy-docs.yml`
 
 - Reserved for a future `doc/` site
 - Only triggers when files under `doc/` change
 
-### 4. `release-plz.yml`
+### 3. `release-plz.yml`
 
 - Automates release PR creation on `main`
 - Can publish the crate when release metadata is ready
 
-### 5. `release.yml`
+### 4. `release.yml`
 
 - Builds release binaries for Linux, Windows, and macOS when version tags are pushed
 - Uploads archived CLI artifacts to the GitHub release
 
-### 6. `update-deps.yml`
+### 5. `update-deps.yml`
 
 - Runs weekly or manually
 - Creates a PR if `cargo update` changes `Cargo.lock`
