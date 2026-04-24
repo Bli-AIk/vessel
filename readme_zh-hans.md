@@ -4,7 +4,7 @@
 <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" />
 <img src="https://img.shields.io/badge/WASM-654FF0?style=for-the-badge&logo=webassembly&logoColor=white" />
 
-> 当前状态：🚧 早期开发阶段 — 架构迁移进行中
+> 当前状态：🚧 早期开发阶段
 
 **vessel** — 用代码生成配置文件的 WASM 运行环境。
 
