@@ -1,0 +1,12 @@
+[package]
+name = "vessel_test_guest"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+wit-bindgen = "0.55"

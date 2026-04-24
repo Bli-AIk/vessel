@@ -1,0 +1,3 @@
+# One crate name per line.
+# Lines starting with # are ignored.
+# Vessel currently does not exclude any local crates from lint or tokei checks.
