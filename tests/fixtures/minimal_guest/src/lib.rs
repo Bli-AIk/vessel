@@ -1,22 +1,17 @@
-use anyhow::Result;
-use serde::Serialize;
-use souprune_vessel::prelude::*;
+wit_bindgen::generate!({
+    path: "../../../wit",
+    world: "content-module",
+});
 
-#[derive(Serialize)]
-struct ExampleConfig {
-    name: String,
-    count: u32,
-}
+struct FixtureGuest;
 
-vessel_guest! {
-    fn build(reg: &mut Registry) -> Result<()> {
-        reg.emit_ron(
-            "example/test.ron",
-            &ExampleConfig {
-                name: "fixture".to_string(),
-                count: 3,
-            },
-        )?;
-        Ok(())
+impl Guest for FixtureGuest {
+    fn build() -> Vec<vessel::build::types::GeneratedFile> {
+        vec![vessel::build::types::GeneratedFile {
+            path: "example/test.ron".to_string(),
+            ron_text: "(name:\"fixture\",count:3)\n".to_string(),
+        }]
     }
 }
+
+export!(FixtureGuest);
