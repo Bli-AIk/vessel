@@ -20,3 +20,4 @@ commit_parsers = [
 
 [[package]]
 name = "vessel"
+git_only = true
