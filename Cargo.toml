@@ -12,7 +12,7 @@ keywords = ["wasm", "ron", "build", "component-model"]
 clap = { version = "4", features = ["derive"] }
 anyhow = "1"
 wasmtime = "44"
-wasmtime-wasi = "43"
+wasmtime-wasi = "44"
 serde = { version = "1", features = ["derive"] }
 toml = "1.1"
 chrono = "0.4"
