@@ -5,7 +5,8 @@
 use crate::component_host::GeneratedRonFile;
 use anyhow::{Context, Result, anyhow};
 use chrono::Local;
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::DeserializeOwned};
+use souprune_schema::RonFileKind;
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::ErrorKind;
@@ -250,6 +251,35 @@ impl OutputConfig {
         normalize_output_signature(existing_text) == self.render_output_signature(ron_text)
     }
 
+    fn existing_body_if_semantically_equal<'a>(
+        &self,
+        relative_path: &str,
+        existing_text: &'a str,
+        ron_text: &str,
+    ) -> Option<&'a str> {
+        let existing_body = self.extract_existing_body(existing_text)?;
+        let kind = RonFileKind::from_path(relative_path)?;
+        if semantically_equal_ron(kind, existing_body, ron_text) {
+            Some(existing_body)
+        } else {
+            None
+        }
+    }
+
+    fn extract_existing_body<'a>(&self, existing_text: &'a str) -> Option<&'a str> {
+        if self.generated_file_header.trim().is_empty() {
+            return Some(existing_text);
+        }
+
+        let generated_at_start = existing_text.find(GENERATED_AT_LINE_PREFIX)?;
+        let generated_at_line_end = existing_text[generated_at_start..].find('\n')?;
+        let mut body_start = generated_at_start + generated_at_line_end + 1;
+        if existing_text[body_start..].starts_with('\n') {
+            body_start += 1;
+        }
+        Some(&existing_text[body_start..])
+    }
+
     fn render_output_text_with_generated_at(&self, ron_text: &str, generated_at: &str) -> String {
         let body = ron_text.trim_end_matches(['\n', '\r']);
         let header = self.generated_file_header.trim_end_matches(['\n', '\r']);
@@ -282,6 +312,71 @@ fn normalize_output_signature(text: &str) -> String {
         }
     }
     normalized
+}
+
+fn semantically_equal_ron(kind: RonFileKind, left: &str, right: &str) -> bool {
+    match kind {
+        RonFileKind::View => normalized_json::<souprune_schema::view::ViewLayoutAsset>(left, right),
+        RonFileKind::SdfStructure => {
+            normalized_json::<souprune_schema::view::SdfStructureAsset>(left, right)
+        }
+        RonFileKind::Performance => {
+            normalized_json::<souprune_schema::danmaku::DanmakuPerformance>(left, right)
+        }
+        RonFileKind::Sequence => {
+            normalized_json::<souprune_schema::sequence::SequenceAsset>(left, right)
+        }
+        RonFileKind::Enemy => normalized_json::<souprune_schema::enemy::EnemyDef>(left, right),
+        RonFileKind::Items => normalized_json::<souprune_schema::item::ItemListAsset>(left, right),
+        RonFileKind::BattlePlayer => {
+            normalized_json::<souprune_schema::battle::BattlePlayerConfig>(left, right)
+        }
+        RonFileKind::Fre => normalized_json::<souprune_schema::fre::FreAsset>(left, right),
+        RonFileKind::Dialogue => {
+            normalized_json::<souprune_schema::dialogue::DialogueConfig>(left, right)
+        }
+        RonFileKind::Input => normalized_json::<souprune_schema::config::InputConfig>(left, right),
+        RonFileKind::Flow => normalized_json::<souprune_schema::config::StateConfig>(left, right),
+        RonFileKind::TouchLayout => {
+            normalized_json::<souprune_schema::config::TouchLayoutDef>(left, right)
+        }
+        RonFileKind::AlightMotionConfig => {
+            normalized_json::<souprune_schema::config::AlightMotionBattleConfig>(left, right)
+        }
+        RonFileKind::Character => {
+            normalized_json::<souprune_schema::character::CharacterAsset>(left, right)
+        }
+        RonFileKind::AnimationConfig => {
+            normalized_json::<souprune_schema::character::AnimationConfigAsset>(left, right)
+        }
+        RonFileKind::PlayerBehavior => {
+            normalized_json::<souprune_schema::overworld::PlayerBehaviorFile>(left, right)
+        }
+        RonFileKind::ChaseConfig => {
+            normalized_json::<souprune_schema::overworld::ChaseConfig>(left, right)
+        }
+    }
+}
+
+fn normalized_json<T>(left: &str, right: &str) -> bool
+where
+    T: DeserializeOwned + Serialize,
+{
+    let options =
+        ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
+    let Ok(left) = options.from_str::<T>(left) else {
+        return false;
+    };
+    let Ok(right) = options.from_str::<T>(right) else {
+        return false;
+    };
+    let Ok(left) = serde_json::to_value(left) else {
+        return false;
+    };
+    let Ok(right) = serde_json::to_value(right) else {
+        return false;
+    };
+    left == right
 }
 
 fn normalized_relative_path(path: &Path) -> Result<String> {
@@ -352,21 +447,34 @@ pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> R
             fs::create_dir_all(parent)
                 .with_context(|| format!("failed to create directory: {}", parent.display()))?;
         }
-        let needs_write = match fs::read_to_string(&full) {
+        let output_body = match fs::read_to_string(&full) {
             Ok(existing_text) => {
-                !output_config.matches_existing_output(&existing_text, &file.ron_text)
+                if output_config.matches_existing_output(&existing_text, &file.ron_text) {
+                    None
+                } else {
+                    Some(
+                        output_config
+                            .existing_body_if_semantically_equal(
+                                &relative,
+                                &existing_text,
+                                &file.ron_text,
+                            )
+                            .unwrap_or(&file.ron_text)
+                            .to_owned(),
+                    )
+                }
             }
-            Err(err) if err.kind() == ErrorKind::NotFound => true,
+            Err(err) if err.kind() == ErrorKind::NotFound => Some(file.ron_text.clone()),
             Err(err) => {
                 return Err(err).with_context(|| {
                     format!("failed to read existing output: {}", full.display())
                 });
             }
         };
-        if !needs_write {
+        let Some(output_body) = output_body else {
             continue;
-        }
-        let rendered_text = output_config.render_output_text(&file.ron_text);
+        };
+        let rendered_text = output_config.render_output_text(&output_body);
         fs::write(&full, rendered_text)
             .with_context(|| format!("failed to write: {}", full.display()))?;
     }
