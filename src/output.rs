@@ -5,8 +5,7 @@
 use crate::component_host::GeneratedRonFile;
 use anyhow::{Context, Result, anyhow};
 use chrono::Local;
-use serde::{Deserialize, Serialize, de::DeserializeOwned};
-use souprune_schema::RonFileKind;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use std::fs;
 use std::io::ErrorKind;
@@ -37,6 +36,14 @@ const GENERATED_AT_SIGNATURE_VALUE: &str = "{{generated_at}}";
 const FORBIDDEN_OUTPUT_ROOTS: &[&str] = &[
     ".build", ".git", ".idea", ".vscode", "content", "runtime", "target",
 ];
+
+/// Options that customize generated file output.
+///
+/// 生成文件输出的自定义选项。
+#[derive(Clone, Copy, Default)]
+pub struct WriteGeneratedFilesOptions<'a> {
+    pub semantic_equal: Option<&'a dyn Fn(&str, &str, &str) -> bool>,
+}
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(default)]
@@ -253,13 +260,14 @@ impl OutputConfig {
 
     fn existing_body_if_semantically_equal<'a>(
         &self,
+        options: WriteGeneratedFilesOptions<'_>,
         relative_path: &str,
         existing_text: &'a str,
         ron_text: &str,
     ) -> Option<&'a str> {
         let existing_body = self.extract_existing_body(existing_text)?;
-        let kind = RonFileKind::from_path(relative_path)?;
-        if semantically_equal_ron(kind, existing_body, ron_text) {
+        let semantic_equal = options.semantic_equal?;
+        if semantic_equal(relative_path, existing_body, ron_text) {
             Some(existing_body)
         } else {
             None
@@ -314,71 +322,6 @@ fn normalize_output_signature(text: &str) -> String {
     normalized
 }
 
-fn semantically_equal_ron(kind: RonFileKind, left: &str, right: &str) -> bool {
-    match kind {
-        RonFileKind::View => normalized_json::<souprune_schema::view::ViewLayoutAsset>(left, right),
-        RonFileKind::SdfStructure => {
-            normalized_json::<souprune_schema::view::SdfStructureAsset>(left, right)
-        }
-        RonFileKind::Performance => {
-            normalized_json::<souprune_schema::danmaku::DanmakuPerformance>(left, right)
-        }
-        RonFileKind::Sequence => {
-            normalized_json::<souprune_schema::sequence::SequenceAsset>(left, right)
-        }
-        RonFileKind::Enemy => normalized_json::<souprune_schema::enemy::EnemyDef>(left, right),
-        RonFileKind::Items => normalized_json::<souprune_schema::item::ItemListAsset>(left, right),
-        RonFileKind::BattlePlayer => {
-            normalized_json::<souprune_schema::battle::BattlePlayerConfig>(left, right)
-        }
-        RonFileKind::Fre => normalized_json::<souprune_schema::fre::FreAsset>(left, right),
-        RonFileKind::Dialogue => {
-            normalized_json::<souprune_schema::dialogue::DialogueConfig>(left, right)
-        }
-        RonFileKind::Input => normalized_json::<souprune_schema::config::InputConfig>(left, right),
-        RonFileKind::Flow => normalized_json::<souprune_schema::config::StateConfig>(left, right),
-        RonFileKind::TouchLayout => {
-            normalized_json::<souprune_schema::config::TouchLayoutDef>(left, right)
-        }
-        RonFileKind::AlightMotionConfig => {
-            normalized_json::<souprune_schema::config::AlightMotionBattleConfig>(left, right)
-        }
-        RonFileKind::Character => {
-            normalized_json::<souprune_schema::character::CharacterAsset>(left, right)
-        }
-        RonFileKind::AnimationConfig => {
-            normalized_json::<souprune_schema::character::AnimationConfigAsset>(left, right)
-        }
-        RonFileKind::PlayerBehavior => {
-            normalized_json::<souprune_schema::overworld::PlayerBehaviorFile>(left, right)
-        }
-        RonFileKind::ChaseConfig => {
-            normalized_json::<souprune_schema::overworld::ChaseConfig>(left, right)
-        }
-    }
-}
-
-fn normalized_json<T>(left: &str, right: &str) -> bool
-where
-    T: DeserializeOwned + Serialize,
-{
-    let options =
-        ron::Options::default().with_default_extension(ron::extensions::Extensions::IMPLICIT_SOME);
-    let Ok(left) = options.from_str::<T>(left) else {
-        return false;
-    };
-    let Ok(right) = options.from_str::<T>(right) else {
-        return false;
-    };
-    let Ok(left) = serde_json::to_value(left) else {
-        return false;
-    };
-    let Ok(right) = serde_json::to_value(right) else {
-        return false;
-    };
-    left == right
-}
-
 fn normalized_relative_path(path: &Path) -> Result<String> {
     if path.is_absolute() {
         return Err(anyhow!(
@@ -429,10 +372,14 @@ fn normalized_relative_path(path: &Path) -> Result<String> {
     Ok(parts.join("/"))
 }
 
-/// Write generated files produced by a Vessel content module.
+/// Write generated files produced by a Vessel content module with custom options.
 ///
-/// 写入 Vessel 内容模块生成的生成文件。
-pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> Result<()> {
+/// 使用自定义选项写入 Vessel 内容模块生成的生成文件。
+pub fn write_generated_files_with_options(
+    files: &[GeneratedRonFile],
+    output_dir: &Path,
+    options: WriteGeneratedFilesOptions<'_>,
+) -> Result<()> {
     validate_unique_generated_paths(files)?;
 
     let output_config = OutputConfig::load(output_dir)?;
@@ -455,6 +402,7 @@ pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> R
                     Some(
                         output_config
                             .existing_body_if_semantically_equal(
+                                options,
                                 &relative,
                                 &existing_text,
                                 &file.ron_text,
@@ -481,6 +429,13 @@ pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> R
 
     output_config.write_manifest(files)?;
     Ok(())
+}
+
+/// Write generated files produced by a Vessel content module.
+///
+/// 写入 Vessel 内容模块生成的生成文件。
+pub fn write_generated_files(files: &[GeneratedRonFile], output_dir: &Path) -> Result<()> {
+    write_generated_files_with_options(files, output_dir, WriteGeneratedFilesOptions::default())
 }
 
 fn validate_unique_generated_paths(files: &[GeneratedRonFile]) -> Result<()> {

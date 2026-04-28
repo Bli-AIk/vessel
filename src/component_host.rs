@@ -2,6 +2,7 @@
 //!
 //! 用于执行 Vessel 内容模块的 Wasmtime 宿主。
 
+use crate::output::WriteGeneratedFilesOptions;
 use anyhow::{Result, anyhow};
 use std::path::{Path, PathBuf};
 use wasmtime::component::{Component, Linker, ResourceTable};
@@ -100,11 +101,26 @@ pub fn build_component(
     component_path: impl AsRef<Path>,
     output_dir: impl AsRef<Path>,
 ) -> Result<BuildSummary> {
+    build_component_with_options(
+        component_path,
+        output_dir,
+        WriteGeneratedFilesOptions::default(),
+    )
+}
+
+/// Execute a Vessel content module and write its output under `output_dir` with custom options.
+///
+/// 使用自定义选项执行 Vessel 内容模块并将其输出写入 `output_dir`。
+pub fn build_component_with_options(
+    component_path: impl AsRef<Path>,
+    output_dir: impl AsRef<Path>,
+    options: WriteGeneratedFilesOptions<'_>,
+) -> Result<BuildSummary> {
     let component_path = component_path.as_ref().to_path_buf();
     let output_dir = output_dir.as_ref().to_path_buf();
 
     let files = load_component_files(&component_path)?;
-    crate::write_generated_files(&files, &output_dir)?;
+    crate::write_generated_files_with_options(&files, &output_dir, options)?;
 
     Ok(BuildSummary {
         component_path,

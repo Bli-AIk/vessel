@@ -16,5 +16,10 @@ mod output;
 
 pub mod prelude;
 
-pub use component_host::{BuildSummary, GeneratedRonFile, build_component, load_component_files};
-pub use output::write_generated_files;
+pub use component_host::{
+    BuildSummary, GeneratedRonFile, build_component, build_component_with_options,
+    load_component_files,
+};
+pub use output::{
+    WriteGeneratedFilesOptions, write_generated_files, write_generated_files_with_options,
+};

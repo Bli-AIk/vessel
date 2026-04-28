@@ -3,6 +3,9 @@
 //! 重导出模块
 
 pub use crate::component_host::{
-    BuildSummary, GeneratedRonFile, build_component, load_component_files,
+    BuildSummary, GeneratedRonFile, build_component, build_component_with_options,
+    load_component_files,
 };
-pub use crate::write_generated_files;
+pub use crate::{
+    WriteGeneratedFilesOptions, write_generated_files, write_generated_files_with_options,
+};
