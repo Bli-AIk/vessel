@@ -7,6 +7,10 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/Bli-AIk/cauld-ron"
 readme = "readme.md"
 keywords = ["wasm", "ron", "build", "component-model"]
+exclude = [
+    ".cargo/",
+    ".github/"
+]
 
 [dependencies]
 clap = { version = "4", features = ["derive"] }
