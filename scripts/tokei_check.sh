@@ -9,7 +9,7 @@
 #   search_dir      — directory to scan in local mode (default: src tests)
 #
 # Local mode checks the current repository.
-# Workspace mode is accepted for compatibility and behaves the same in Vessel.
+# Workspace mode is accepted for compatibility and behaves the same in Cauld-ron.
 
 set -euo pipefail
 
