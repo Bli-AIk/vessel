@@ -1,26 +1,26 @@
-//! Command-line interface for Vessel.
+//! Command-line interface for Cauld-ron.
 //!
-//! Vessel 的命令行接口。
+//! Cauld-ron 的命令行接口。
 
 use crate::component_host::build_component;
 use anyhow::Result;
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
-/// Vessel CLI entrypoint.
+/// Cauld-ron CLI entrypoint.
 ///
-/// Vessel CLI 入口。
+/// Cauld-ron CLI 入口。
 #[derive(Debug, Parser)]
-#[command(name = "vessel")]
+#[command(name = "cauld-ron")]
 #[command(about = "Build RON files from WASM content modules")]
 pub struct Cli {
     #[command(subcommand)]
     pub command: Command,
 }
 
-/// Supported Vessel commands.
+/// Supported Cauld-ron commands.
 ///
-/// Vessel 支持的命令。
+/// Cauld-ron 支持的命令。
 #[derive(Debug, Subcommand)]
 pub enum Command {
     /// Execute a content module and write its generated RON files.
@@ -44,7 +44,7 @@ pub fn run() -> Result<()> {
         Command::Build { component, output } => {
             let summary = build_component(&component, &output)?;
             println!(
-                "vessel: built {} file(s) from {} -> {}",
+                "cauld-ron: built {} file(s) from {} -> {}",
                 summary.written_files,
                 summary.component_path.display(),
                 summary.output_dir.display()

@@ -1,3 +1,3 @@
 fn main() -> anyhow::Result<()> {
-    vessel::cli::run()
+    cauld_ron::cli::run()
 }

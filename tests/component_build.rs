@@ -20,7 +20,7 @@ fn build_fixture_guest() -> PathBuf {
 
     assert!(status.success(), "fixture guest should build successfully");
 
-    let component_path = fixture_dir.join("target/wasm32-wasip2/debug/vessel_test_guest.wasm");
+    let component_path = fixture_dir.join("target/wasm32-wasip2/debug/cauld-ron_test_guest.wasm");
     assert!(
         component_path.exists(),
         "fixture wasm component should exist"
@@ -39,8 +39,8 @@ fn temp_output_dir(prefix: &str) -> PathBuf {
     output_dir
 }
 
-fn generated_file(path: impl Into<PathBuf>) -> vessel::GeneratedRonFile {
-    vessel::GeneratedRonFile {
+fn generated_file(path: impl Into<PathBuf>) -> cauld_ron::GeneratedRonFile {
+    cauld_ron::GeneratedRonFile {
         path: path.into(),
         ron_text: "(value: 1)\n".to_owned(),
     }
@@ -49,10 +49,10 @@ fn generated_file(path: impl Into<PathBuf>) -> vessel::GeneratedRonFile {
 #[test]
 fn builds_generated_ron_from_wasm_component() {
     let component_path = build_fixture_guest();
-    let output_dir = temp_output_dir("vessel_component_build");
+    let output_dir = temp_output_dir("cauld-ron_component_build");
 
-    let summary = vessel::build_component(&component_path, &output_dir)
-        .expect("vessel host should build files from the wasm component");
+    let summary = cauld_ron::build_component(&component_path, &output_dir)
+        .expect("cauld-ron host should build files from the wasm component");
 
     assert_eq!(
         summary.written_files, 1,
@@ -65,7 +65,7 @@ fn builds_generated_ron_from_wasm_component() {
     let content = fs::read_to_string(&output_path).expect("generated file should be readable");
     assert!(
         content.contains("BOOTSTRAPPED BY VESSEL"),
-        "generated file should include the default vessel bootstrap header"
+        "generated file should include the default cauld-ron bootstrap header"
     );
     assert!(
         content.contains("// Generated at: "),
@@ -82,21 +82,21 @@ fn builds_generated_ron_from_wasm_component() {
 #[test]
 fn prunes_stale_files_from_previous_output_manifest() {
     let component_path = build_fixture_guest();
-    let output_dir = temp_output_dir("vessel_component_manifest");
+    let output_dir = temp_output_dir("cauld-ron_component_manifest");
 
     fs::create_dir_all(output_dir.join("example")).expect("should create example directory");
     fs::write(output_dir.join("example/stale.ron"), "(stale: true)\n")
         .expect("should write stale managed file");
     fs::create_dir_all(output_dir.join(".build")).expect("should create build directory");
     fs::write(
-        output_dir.join(".build/vessel-output-manifest.toml"),
+        output_dir.join(".build/cauld-ron-output-manifest.toml"),
         r#"version = 1
 owned_paths = ["example/stale.ron", "example/test.ron"]
 "#,
     )
     .expect("should write previous output manifest");
 
-    vessel::build_component(&component_path, &output_dir)
+    cauld_ron::build_component(&component_path, &output_dir)
         .expect("manifest-managed output should be generated successfully");
 
     assert!(
@@ -113,11 +113,11 @@ owned_paths = ["example/stale.ron", "example/test.ron"]
 
 #[test]
 fn rejects_generated_files_inside_tooling_directories() {
-    let output_dir = temp_output_dir("vessel_component_rejects_tooling_roots");
+    let output_dir = temp_output_dir("cauld-ron_component_rejects_tooling_roots");
 
     fs::create_dir_all(&output_dir).expect("should create output directory");
     let err =
-        vessel::write_generated_files(&[generated_file("content/ron/forbidden.ron")], &output_dir)
+        cauld_ron::write_generated_files(&[generated_file("content/ron/forbidden.ron")], &output_dir)
             .expect_err("host should reject generated files inside tooling roots");
     let err_text = err.to_string();
     assert!(
@@ -130,10 +130,10 @@ fn rejects_generated_files_inside_tooling_directories() {
 
 #[test]
 fn rejects_generated_files_without_ron_extension() {
-    let output_dir = temp_output_dir("vessel_component_rejects_non_ron");
+    let output_dir = temp_output_dir("cauld-ron_component_rejects_non_ron");
 
     fs::create_dir_all(&output_dir).expect("should create output directory");
-    let err = vessel::write_generated_files(&[generated_file("battle/not_ron.txt")], &output_dir)
+    let err = cauld_ron::write_generated_files(&[generated_file("battle/not_ron.txt")], &output_dir)
         .expect_err("host should reject non-RON output paths");
     let err_text = err.to_string();
     assert!(
@@ -146,17 +146,17 @@ fn rejects_generated_files_without_ron_extension() {
 
 #[test]
 fn rejects_duplicate_generated_paths() {
-    let output_dir = temp_output_dir("vessel_component_duplicate_paths");
+    let output_dir = temp_output_dir("cauld-ron_component_duplicate_paths");
 
     fs::create_dir_all(&output_dir).expect("should create output directory");
 
-    let err = vessel::write_generated_files(
+    let err = cauld_ron::write_generated_files(
         &[
-            vessel::GeneratedRonFile {
+            cauld_ron::GeneratedRonFile {
                 path: PathBuf::from("example/duplicate.ron"),
                 ron_text: "(value: 1)\n".to_owned(),
             },
-            vessel::GeneratedRonFile {
+            cauld_ron::GeneratedRonFile {
                 path: PathBuf::from("./example/duplicate.ron"),
                 ron_text: "(value: 2)\n".to_owned(),
             },
@@ -193,9 +193,9 @@ fn rejects_unsafe_generated_paths() {
     ];
 
     for (path, expected_message) in cases {
-        let output_dir = temp_output_dir("vessel_component_rejects_unsafe_path");
+        let output_dir = temp_output_dir("cauld-ron_component_rejects_unsafe_path");
         fs::create_dir_all(&output_dir).expect("should create output directory");
-        let err = vessel::write_generated_files(&[generated_file(path)], &output_dir)
+        let err = cauld_ron::write_generated_files(&[generated_file(path)], &output_dir)
             .expect_err("host should reject unsafe output path");
         let err_text = err.to_string();
         assert!(
@@ -208,13 +208,13 @@ fn rejects_unsafe_generated_paths() {
 
 #[test]
 fn rejects_overwriting_existing_files_not_owned_by_manifest() {
-    let output_dir = temp_output_dir("vessel_component_rejects_unmanaged_existing");
+    let output_dir = temp_output_dir("cauld-ron_component_rejects_unmanaged_existing");
 
     fs::create_dir_all(output_dir.join("example")).expect("should create example directory");
     fs::write(output_dir.join("example/existing.ron"), "(manual: true)\n")
         .expect("should write unmanaged file");
 
-    let err = vessel::write_generated_files(&[generated_file("example/existing.ron")], &output_dir)
+    let err = cauld_ron::write_generated_files(&[generated_file("example/existing.ron")], &output_dir)
         .expect_err("host should reject overwriting unmanaged files");
     let err_text = err.to_string();
     assert!(
@@ -231,7 +231,7 @@ fn rejects_overwriting_existing_files_not_owned_by_manifest() {
 
 #[test]
 fn respects_custom_generated_file_header_from_mod_toml() {
-    let output_dir = temp_output_dir("vessel_component_custom_header");
+    let output_dir = temp_output_dir("cauld-ron_component_custom_header");
 
     fs::create_dir_all(&output_dir).expect("should create output directory");
     fs::write(
@@ -242,8 +242,8 @@ generated_file_header = "// custom header\n// generated for tests"
     )
     .expect("should write mod.toml");
 
-    vessel::write_generated_files(
-        &[vessel::GeneratedRonFile {
+    cauld_ron::write_generated_files(
+        &[cauld_ron::GeneratedRonFile {
             path: PathBuf::from("example/custom.ron"),
             ron_text: "(value: 1)\n".to_owned(),
         }],
@@ -267,7 +267,7 @@ generated_file_header = "// custom header\n// generated for tests"
 
 #[test]
 fn allows_disabling_generated_file_header_via_empty_override() {
-    let output_dir = temp_output_dir("vessel_component_no_header");
+    let output_dir = temp_output_dir("cauld-ron_component_no_header");
 
     fs::create_dir_all(&output_dir).expect("should create output directory");
     fs::write(
@@ -278,8 +278,8 @@ generated_file_header = ""
     )
     .expect("should write mod.toml");
 
-    vessel::write_generated_files(
-        &[vessel::GeneratedRonFile {
+    cauld_ron::write_generated_files(
+        &[cauld_ron::GeneratedRonFile {
             path: PathBuf::from("example/plain.ron"),
             ron_text: "(value: 1)\n".to_owned(),
         }],
@@ -299,23 +299,23 @@ generated_file_header = ""
 
 #[test]
 fn preserves_existing_timestamp_when_content_does_not_change() {
-    let output_dir = temp_output_dir("vessel_component_stable_timestamp");
+    let output_dir = temp_output_dir("cauld-ron_component_stable_timestamp");
 
     fs::create_dir_all(&output_dir).expect("should create output directory");
 
-    let files = [vessel::GeneratedRonFile {
+    let files = [cauld_ron::GeneratedRonFile {
         path: PathBuf::from("example/stable.ron"),
         ron_text: "(value: 1)\n".to_owned(),
     }];
 
-    vessel::write_generated_files(&files, &output_dir)
+    cauld_ron::write_generated_files(&files, &output_dir)
         .expect("host should write generated file on first pass");
     let output_path = output_dir.join("example/stable.ron");
     let first = fs::read_to_string(&output_path).expect("first generated file should be readable");
 
     thread::sleep(Duration::from_millis(1100));
 
-    vessel::write_generated_files(&files, &output_dir)
+    cauld_ron::write_generated_files(&files, &output_dir)
         .expect("host should allow regenerating unchanged output");
     let second =
         fs::read_to_string(&output_path).expect("second generated file should be readable");
@@ -330,12 +330,12 @@ fn preserves_existing_timestamp_when_content_does_not_change() {
 
 #[test]
 fn replaces_changed_existing_body_without_semantic_hook() {
-    let output_dir = temp_output_dir("vessel_component_no_semantic_hook");
+    let output_dir = temp_output_dir("cauld-ron_component_no_semantic_hook");
 
     fs::create_dir_all(output_dir.join("example")).expect("should create output directory");
     fs::create_dir_all(output_dir.join(".build")).expect("should create build directory");
     fs::write(
-        output_dir.join(".build/vessel-output-manifest.toml"),
+        output_dir.join(".build/cauld-ron-output-manifest.toml"),
         r#"version = 1
 owned_paths = ["example/changed.ron"]
 "#,
@@ -367,8 +367,8 @@ owned_paths = ["example/changed.ron"]
     )
     .expect("should write existing output");
 
-    vessel::write_generated_files(
-        &[vessel::GeneratedRonFile {
+    cauld_ron::write_generated_files(
+        &[cauld_ron::GeneratedRonFile {
             path: PathBuf::from("example/changed.ron"),
             ron_text: "(value: \"generated\")\n".to_owned(),
         }],
@@ -392,12 +392,12 @@ owned_paths = ["example/changed.ron"]
 
 #[test]
 fn semantic_hook_preserves_existing_body_and_refreshes_timestamp() {
-    let output_dir = temp_output_dir("vessel_component_semantic_hook");
+    let output_dir = temp_output_dir("cauld-ron_component_semantic_hook");
 
     fs::create_dir_all(output_dir.join("example")).expect("should create output directory");
     fs::create_dir_all(output_dir.join(".build")).expect("should create build directory");
     fs::write(
-        output_dir.join(".build/vessel-output-manifest.toml"),
+        output_dir.join(".build/cauld-ron-output-manifest.toml"),
         r#"version = 1
 owned_paths = ["example/equivalent.ron"]
 "#,
@@ -429,7 +429,7 @@ owned_paths = ["example/equivalent.ron"]
     )
     .expect("should write existing output");
 
-    let options = vessel::WriteGeneratedFilesOptions {
+    let options = cauld_ron::WriteGeneratedFilesOptions {
         semantic_equal: Some(&|relative_path, existing_body, generated_body| {
             relative_path == "example/equivalent.ron"
                 && existing_body.contains("(value: \"manual\")")
@@ -437,8 +437,8 @@ owned_paths = ["example/equivalent.ron"]
         }),
     };
 
-    vessel::write_generated_files_with_options(
-        &[vessel::GeneratedRonFile {
+    cauld_ron::write_generated_files_with_options(
+        &[cauld_ron::GeneratedRonFile {
             path: PathBuf::from("example/equivalent.ron"),
             ron_text: "(value: \"generated\")\n".to_owned(),
         }],

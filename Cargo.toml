@@ -1,10 +1,10 @@
 [package]
-name = "vessel"
+name = "cauld-ron"
 version = "0.1.0"
 edition = "2024"
 description = "WASM-driven RON build infrastructure for Bevy projects"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/Bli-AIk/vessel"
+repository = "https://github.com/Bli-AIk/cauld-ron"
 readme = "readme.md"
 keywords = ["wasm", "ron", "build", "component-model"]
 publish = false

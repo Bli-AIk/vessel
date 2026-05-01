@@ -21,6 +21,6 @@ commit_parsers = [
 ]
 
 [[package]]
-name = "vessel"
+name = "cauld-ron"
 git_only = true
 publish = false
