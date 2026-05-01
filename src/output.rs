@@ -126,7 +126,7 @@ impl OutputConfig {
             let relative =
                 normalized_relative_path(Path::new(&previous_path)).with_context(|| {
                     format!(
-                        "invalid path '{}' found in vessel output manifest {}",
+                        "invalid path '{}' found in cauld-ron output manifest {}",
                         previous_path,
                         self.manifest_path.display()
                     )
@@ -201,7 +201,7 @@ impl OutputConfig {
             owned_paths,
         };
         let serialized = toml::to_string_pretty(&manifest)
-            .context("failed to serialize vessel output manifest")?;
+            .context("failed to serialize cauld-ron output manifest")?;
 
         if let Some(parent) = self.manifest_path.parent() {
             fs::create_dir_all(parent)
@@ -209,7 +209,7 @@ impl OutputConfig {
         }
         fs::write(&self.manifest_path, serialized).with_context(|| {
             format!(
-                "failed to write vessel output manifest: {}",
+                "failed to write cauld-ron output manifest: {}",
                 self.manifest_path.display()
             )
         })?;
@@ -224,20 +224,20 @@ impl OutputConfig {
 
         let contents = fs::read_to_string(&self.manifest_path).with_context(|| {
             format!(
-                "failed to read vessel output manifest: {}",
+                "failed to read cauld-ron output manifest: {}",
                 self.manifest_path.display()
             )
         })?;
         let manifest: OutputManifest = toml::from_str(&contents).with_context(|| {
             format!(
-                "failed to parse vessel output manifest: {}",
+                "failed to parse cauld-ron output manifest: {}",
                 self.manifest_path.display()
             )
         })?;
 
         if manifest.version != OUTPUT_MANIFEST_VERSION {
             return Err(anyhow!(
-                "unsupported vessel output manifest version {} in {}",
+                "unsupported cauld-ron output manifest version {} in {}",
                 manifest.version,
                 self.manifest_path.display()
             ));

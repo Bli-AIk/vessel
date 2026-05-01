@@ -79,7 +79,7 @@ pub fn load_component_files(component_path: impl AsRef<Path>) -> Result<Vec<Gene
     );
 
     let bindings = ContentModule::instantiate(&mut store, &component, &linker)
-        .map_err(|err| anyhow!("failed to instantiate vessel content module: {err}"))?;
+        .map_err(|err| anyhow!("failed to instantiate cauld-ron content module: {err}"))?;
 
     let files = bindings
         .call_build(&mut store)
