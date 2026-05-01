@@ -1,12 +1,12 @@
-# vessel
+# cauld-ron
 
-[![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE) <img src="https://img.shields.io/github/repo-size/Bli-AIk/vessel.svg"/> <img src="https://img.shields.io/github/last-commit/Bli-AIk/vessel.svg"/> <br>
+[![license](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-APACHE) <img src="https://img.shields.io/github/repo-size/Bli-AIk/cauld-ron.svg"/> <img src="https://img.shields.io/github/last-commit/Bli-AIk/cauld-ron.svg"/> <br>
 <img src="https://img.shields.io/badge/Rust-000000?style=for-the-badge&logo=rust&logoColor=white" />
 <img src="https://img.shields.io/badge/WASM-654FF0?style=for-the-badge&logo=webassembly&logoColor=white" />
 
 > 当前状态：🚧 早期开发阶段
 
-**vessel** — 用代码生成配置文件的 WASM 运行环境。
+**cauld-ron** — 用代码生成配置文件的 WASM 运行环境。
 
 | English | Simplified Chinese |
 |---------|--------------------|
@@ -18,11 +18,11 @@
 
 如果是要人类去手写成百上千行、充满“魔法数字”和精确计算的 `.ron` 文件（比如用数学公式生成的关键帧动画、错综复杂的剧情分支树，或是庞大的 RPG 属性数值表），那纯粹是一场折磨。
 
-`vessel` 就是为了反转这种局面而诞生的。它允许你**写一段代码来算好复杂的逻辑，然后自动生成出 `.ron` 格式的配置文件**。
+`cauld-ron` 就是为了反转这种局面而诞生的。它允许你**写一段代码来算好复杂的逻辑，然后自动生成出 `.ron` 格式的配置文件**。
 
-为了保证安全，也为了以后能支持用各种不同的语言来写生成器，你写的这段生成代码会被编译成 WASM 插件（WASM Component）。`vessel` 扮演的就是一个“运行环境”的角色，它专门负责运行你写好的 WASM 插件，并把插件生成的配置内容保存到硬盘上。
+为了保证安全，也为了以后能支持用各种不同的语言来写生成器，你写的这段生成代码会被编译成 WASM 插件（WASM Component）。`cauld-ron` 扮演的就是一个“运行环境”的角色，它专门负责运行你写好的 WASM 插件，并把插件生成的配置内容保存到硬盘上。
 
-一句话总结：**写代码算数据 -> 编译成 WASM -> 用 vessel 运行 -> 得到 RON 配置文件**。
+一句话总结：**写代码算数据 -> 编译成 WASM -> 用 cauld-ron 运行 -> 得到 RON 配置文件**。
 
 ## 特性
 
@@ -34,17 +34,17 @@
 
 ## 如何使用
 
-使用分为两步：先写一个“生成器”（WASM 端），然后用 `vessel` 去运行它（宿主端）。
+使用分为两步：先写一个“生成器”（WASM 端），然后用 `cauld-ron` 去运行它（宿主端）。
 
 ### 1. 写一个生成器 (WASM 侧)
 
-由于 `vessel` 核心只提供一套标准化的 WIT 契约，在你的 WASM 插件项目里，你需要使用 `wit-bindgen` 来生成接口并实现它：
+由于 `cauld-ron` 核心只提供一套标准化的 WIT 契约，在你的 WASM 插件项目里，你需要使用 `wit-bindgen` 来生成接口并实现它：
 
 ```rust
 // src/lib.rs
-// 使用 wit-bindgen 引入 vessel 的接口定义
+// 使用 wit-bindgen 引入 cauld-ron 的接口定义
 wit_bindgen::generate!({
-    path: "path/to/vessel/wit",
+    path: "path/to/cauld-ron/wit",
     world: "content-module",
 });
 
@@ -52,13 +52,13 @@ struct MyContentPlugin;
 
 // 实现 Guest 接口
 impl Guest for MyContentPlugin {
-    fn build() -> Vec<vessel::build::types::GeneratedFile> {
+    fn build() -> Vec<cauld_ron::build::types::GeneratedFile> {
         // 这里可以写各种复杂的 for 循环、数学计算等
         let my_data = "{ // 经过一顿猛算得出的配置内容... }";
 
-        vec![vessel::build::types::GeneratedFile {
-            path: "my_battle.ron".to_string(), // 告诉 vessel 这个文件叫啥
-            ron_text: my_data.to_string(),     // 告诉 vessel 文件内容是啥
+        vec![cauld_ron::build::types::GeneratedFile {
+            path: "my_battle.ron".to_string(), // 告诉 cauld-ron 这个文件叫啥
+            ron_text: my_data.to_string(),     // 告诉 cauld-ron 文件内容是啥
         }]
     }
 }
@@ -75,10 +75,10 @@ cargo build -p my_content_mod --target wasm32-wasip2
 
 ### 2. 运行生成器 (宿主侧)
 
-拿到编译好的 `.wasm` 文件后，用 `vessel` 的命令行工具跑一下，文件就出来了：
+拿到编译好的 `.wasm` 文件后，用 `cauld-ron` 的命令行工具跑一下，文件就出来了：
 
 ```bash
-cargo run -p vessel -- build \
+cargo run -p cauld-ron -- build \
   target/wasm32-wasip2/debug/my_content_mod.wasm \
   --output ./assets/generated
 ```
@@ -86,7 +86,7 @@ cargo run -p vessel -- build \
 **或者，作为代码库接入**：如果你在写自己的构建脚本，可以直接调 API：
 
 ```rust
-use vessel::prelude::*;
+use cauld_ron::prelude::*;
 
 fn main() -> anyhow::Result<()> {
     // 一行代码：加载 WASM，运行它，并把生成的文件存到指定目录
@@ -107,7 +107,7 @@ fn main() -> anyhow::Result<()> {
 ```bash
 # 1. 克隆仓库
 git clone https://github.com/Bli-AIk/souprune.git
-cd souprune/crates/vessel
+cd souprune/crates/cauld-ron
 
 # 2. 运行测试
 cargo test

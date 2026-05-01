@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a bug or unexpected behavior in vessel
+about: Report a bug or unexpected behavior in cauld-ron
 title: 'bug: [Short description]'
 labels: bug
 assignees: ''
@@ -9,7 +9,7 @@ assignees: ''
 
 ### 🐛 Problem Description
 Provide a clear description of the issue. Include:
-- **vessel version**: (e.g., crate version or commit hash)
+- **cauld-ron version**: (e.g., crate version or commit hash)
 - **Type of issue**: compile-time / runtime / output mismatch / unexpected behavior
 - Short code snippet showing the context (optional, but helpful)
 

@@ -7,11 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.0](https://github.com/Bli-AIk/vessel/compare/v0.0.1...v0.1.0) - 2026-04-28
+## [0.1.0](https://github.com/Bli-AIk/cauld-ron/compare/v0.0.1...v0.1.0) - 2026-04-28
 
 ### Added
 
-- *(core)* add vessel execution support with RON sugar syntax
+- *(core)* add cauld-ron execution support with RON sugar syntax
 
 ### Fixed
 
@@ -19,4 +19,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Testing
 
-- *(core)* refactor vessel output and add write options
+- *(core)* refactor cauld-ron output and add write options

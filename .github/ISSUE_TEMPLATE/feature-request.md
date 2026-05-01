@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest a new feature or improvement for vessel
+about: Suggest a new feature or improvement for cauld-ron
 title: 'feat: [Brief description of the feature]'
 labels: enhancement
 assignees: ''

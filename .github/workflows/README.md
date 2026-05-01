@@ -1,4 +1,4 @@
-# GitHub Workflows for vessel
+# GitHub Workflows for cauld-ron
 
 This repository includes the following GitHub Actions workflows.
 

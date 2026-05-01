@@ -1,6 +1,6 @@
 ---
 name: Refactor request
-about: Suggest improvements to vessel's code structure or design
+about: Suggest improvements to cauld-ron's code structure or design
 title: 'refactor: [Brief description of the refactoring]'
 labels: refactor
 assignees: ''

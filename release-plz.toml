@@ -22,5 +22,4 @@ commit_parsers = [
 
 [[package]]
 name = "cauld-ron"
-git_only = true
 publish = false
