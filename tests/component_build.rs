@@ -20,7 +20,7 @@ fn build_fixture_guest() -> PathBuf {
 
     assert!(status.success(), "fixture guest should build successfully");
 
-    let component_path = fixture_dir.join("target/wasm32-wasip2/debug/cauld-ron_test_guest.wasm");
+    let component_path = fixture_dir.join("target/wasm32-wasip2/debug/cauld_ron_test_guest.wasm");
     assert!(
         component_path.exists(),
         "fixture wasm component should exist"
