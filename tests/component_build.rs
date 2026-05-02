@@ -234,6 +234,35 @@ fn rejects_overwriting_existing_files_not_owned_by_manifest() {
 }
 
 #[test]
+fn adopts_matching_bootstrapped_files_when_manifest_is_missing() {
+    let output_dir = temp_output_dir("cauld-ron_component_adopts_missing_manifest");
+    let files = [generated_file("example/adopted.ron")];
+
+    cauld_ron::write_generated_files(&files, &output_dir)
+        .expect("initial generated output should be written");
+    let output_path = output_dir.join("example/adopted.ron");
+    let first = fs::read_to_string(&output_path).expect("generated file should be readable");
+    let manifest_path = output_dir.join(".build/cauld-ron-output-manifest.toml");
+    fs::remove_file(&manifest_path).expect("test should remove the output manifest");
+
+    cauld_ron::write_generated_files(&files, &output_dir)
+        .expect("matching bootstrapped output should be adopted into a fresh manifest");
+
+    let second = fs::read_to_string(&output_path).expect("generated file should be readable");
+    assert_eq!(
+        second, first,
+        "adopting an unchanged bootstrapped file should avoid output churn"
+    );
+    let manifest = fs::read_to_string(&manifest_path).expect("manifest should be recreated");
+    assert!(
+        manifest.contains("example/adopted.ron"),
+        "manifest should own the adopted path: {manifest}"
+    );
+
+    let _ = fs::remove_dir_all(&output_dir);
+}
+
+#[test]
 fn respects_custom_generated_file_header_from_mod_toml() {
     let output_dir = temp_output_dir("cauld-ron_component_custom_header");
 

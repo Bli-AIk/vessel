@@ -178,16 +178,26 @@ impl OutputConfig {
                     relative
                 ));
             }
-            if !owned_paths.contains(&relative) {
-                return Err(anyhow!(
-                    "generated path '{}' already exists but is not managed by Cauld-ron manifest {}",
-                    relative,
-                    self.manifest_path.display()
-                ));
+            if owned_paths.contains(&relative) {
+                continue;
             }
+            if self.matches_existing_file_output(&path, &file.ron_text)? {
+                continue;
+            }
+            return Err(anyhow!(
+                "generated path '{}' already exists but is not managed by Cauld-ron manifest {}",
+                relative,
+                self.manifest_path.display()
+            ));
         }
 
         Ok(())
+    }
+
+    fn matches_existing_file_output(&self, path: &Path, ron_text: &str) -> Result<bool> {
+        let existing_text = fs::read_to_string(path)
+            .with_context(|| format!("failed to read existing output: {}", path.display()))?;
+        Ok(self.matches_existing_output(&existing_text, ron_text))
     }
 
     fn write_manifest(&self, files: &[GeneratedRonFile]) -> Result<()> {
